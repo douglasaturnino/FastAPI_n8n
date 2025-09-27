@@ -1,0 +1,7 @@
+fastapi==0.117.1
+gdown==5.2.0
+pandas==2.3.2
+psycopg2-binary==2.9.10
+python-dotenv==1.1.1
+sqlalchemy==2.0.43
+uvicorn==0.37.0
