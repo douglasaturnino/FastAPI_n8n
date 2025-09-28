@@ -7,6 +7,7 @@ from pydantic import BaseModel
 import os
 import re
 from loguru import logger
+import requests
 
 load_dotenv()
 app = FastAPI()
@@ -21,7 +22,11 @@ def process_csv(request: SendFileRequest, background_tasks: BackgroundTasks):
     """Roda o processamento em background para não travar a API"""
     logger.info(f"Recebida requisição para processar arquivo. fileId={request.fileId}, chatId={request.chatId}")
     background_tasks.add_task(process_and_store, request.fileId, request.chatId)
-    return {"status": "processing", "message": "O arquivo está sendo processado em background."}
+    return {"status": "processing", "texto": "O arquivo está sendo processado em background. Você receberá uma notificação quando estiver pronto."}
+
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
 
 
 def download_csv_from_drive(file_id: str) -> str:
@@ -35,6 +40,7 @@ def download_csv_from_drive(file_id: str) -> str:
         return output
     except Exception as e:
         logger.error(f"Erro ao baixar CSV do Google Drive: {e}")
+
         raise
 
 
@@ -82,5 +88,29 @@ def process_and_store(file_id: str, chat_id: str, chunksize: int = 50_000):
             first_chunk = False
 
         logger.success(f"✅ Processamento concluído para chat_id={chat_id}, tabela={table_name}, total de linhas={total_rows}")
+        send_webhook(chat_id, text="Seu arquivo foi processado com sucesso! Estou pronto para responder as suas perguntas.")
     except Exception as e:
         logger.exception(f"Erro durante o processamento do arquivo. chat_id={chat_id} - Erro: {e}")
+        send_webhook(chat_id, text=f"Ocorreu um erro ao processar seu arquivo")
+
+
+def send_webhook(chat_id: str, text: str):
+    """Envia dados para o webhook do n8n"""
+
+    # URL do webhook (substitua pela URL do seu webhook n8n)
+    webhook_url = os.getenv("WEBHOOK_URL")
+
+    data = {
+        "texto": text,
+        "chat_id": chat_id,
+    }
+
+    response= requests.post(webhook_url, json=data)
+
+    # Verificar o status da resposta
+    if response.status_code == 200:
+        logger.debug("Mensagem enviada com sucesso!")
+    else:
+        logger.error(f"Erro ao enviar mensagem: {response.status_code}")
+
+
