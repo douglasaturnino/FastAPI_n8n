@@ -17,6 +17,10 @@ class SendFileRequest(BaseModel):
     chatId: str
 
 
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
+
 @app.post("/process_csv")
 def process_csv(request: SendFileRequest, background_tasks: BackgroundTasks):
     """Roda o processamento em background para não travar a API"""
@@ -24,9 +28,31 @@ def process_csv(request: SendFileRequest, background_tasks: BackgroundTasks):
     background_tasks.add_task(process_and_store, request.fileId, request.chatId)
     return {"status": "processing", "texto": "O arquivo está sendo processado em background. Você receberá uma notificação quando estiver pronto."}
 
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
+@app.post("/spreadsheets")
+def receive_spreadsheet(request: SendFileRequest, background_tasks: BackgroundTasks):
+    """Roda o processamento em background para não travar a API"""
+    logger.info(f"Recebida requisição para processar arquivo. fileId={request.fileId}, chatId={request.chatId}")
+    background_tasks.add_task(process_spreadsheet, request.fileId, request.chatId)
+    return {"status": "processing", "texto": "O arquivo está sendo processado em background. Você receberá uma notificação quando estiver pronto."}
+
+
+def process_spreadsheet(file_id: str, chat_id: str, chunksize: int = 50_000):
+    engine = create_engine(os.getenv("POSTGRES_URI"))
+
+    url = f"https://docs.google.com/spreadsheets/d/{file_id}/export?format=csv"
+    df = pd.read_csv(url)
+
+    table_name = sanitize_table_name(chat_id)
+
+    df.columns = df.columns.str.lower()
+    df['chat_id'] = chat_id
+
+    df.to_sql(table_name, engine, index=False, if_exists="replace")
+    logger.success(f"CSV salvo no banco: {len(df)} linhas.")
+
+    send_webhook(chat_id, text="Seu arquivo foi processado com sucesso! Estou pronto para responder as suas perguntas.")
+
+    logger.success(f"Processamento concluído para chat_id={chat_id}, tabela={table_name}, total de linhas={len(df)}")
 
 
 def download_csv_from_drive(file_id: str) -> str:
@@ -87,8 +113,9 @@ def process_and_store(file_id: str, chat_id: str, chunksize: int = 50_000):
             total_rows += len(chunk)
             first_chunk = False
 
-        logger.success(f"✅ Processamento concluído para chat_id={chat_id}, tabela={table_name}, total de linhas={total_rows}")
         send_webhook(chat_id, text="Seu arquivo foi processado com sucesso! Estou pronto para responder as suas perguntas.")
+        logger.success(f"Processamento concluído para chat_id={chat_id}, tabela={table_name}, total de linhas={total_rows}")
+        os.remove(file_path)
     except Exception as e:
         logger.exception(f"Erro durante o processamento do arquivo. chat_id={chat_id} - Erro: {e}")
         send_webhook(chat_id, text=f"Ocorreu um erro ao processar seu arquivo")
