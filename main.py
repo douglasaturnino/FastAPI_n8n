@@ -39,9 +39,9 @@ def process_csv(request: SendFileRequest, background_tasks: BackgroundTasks):
     }
 
 
-@app.post("/upload-csv-stream")
+@app.post("/upload_csv_stream")
 def upload_csv_stream(
-    chat_id: str = Form(...),
+    chat_id: str,
     file: UploadFile = File(...),
     background_tasks: BackgroundTasks = None,
 ):
