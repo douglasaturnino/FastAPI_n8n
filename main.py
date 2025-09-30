@@ -1,3 +1,4 @@
+import csv
 import os
 import re
 
@@ -55,7 +56,7 @@ def upload_csv_stream(
 
     tmp_path = f"/tmp/{file.filename}"
     mode = "w"
-    for df in pd.read_csv(file.file, chunksize=50_000):
+    for df in pd.read_csv(file.file, on_bad_lines="skip", chunksize=50_000):
         df.to_csv(
             tmp_path,
             mode=mode,
